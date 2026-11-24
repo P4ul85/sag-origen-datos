@@ -41,3 +41,11 @@ jobs:
           else
             echo "sin cambios en labs.json"
           fi
+      - name: Avisar si falló
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "⚠️ Falló la actualización automática: $GITHUB_WORKFLOW" \
+            --body "El workflow **$GITHUB_WORKFLOW** falló el $(date -u +%Y-%m-%dT%H:%MZ UTC). Revisa el log: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" || true
