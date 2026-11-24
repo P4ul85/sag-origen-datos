@@ -1,0 +1,43 @@
+name: Actualizar Laboratorios autorizados
+on:
+  schedule:
+    - cron: '40 8 * * 1'   # lunes ~05:40 Chile
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Reparsear aunque el Excel no haya cambiado (prueba)'
+        default: 'false'
+        type: choice
+        options: ['false','true']
+permissions:
+  contents: write
+concurrency:
+  group: labs
+  cancel-in-progress: false
+jobs:
+  labs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Instalar dependencias
+        run: pip install requests openpyxl
+      - name: Revisar y actualizar labs.json
+        run: python3 scripts/lab_fetch.py
+        env:
+          FORCE: ${{ github.event.inputs.force == 'true' && '1' || '0' }}
+      - name: Commit si cambió
+        run: |
+          if git status --porcelain labs.json | grep -q .; then
+            git config user.name 'SAG labs bot'
+            git config user.email 'noreply@anthropic.com'
+            F=$(python3 -c "import json;print(json.load(open('labs.json'))['file'])")
+            git add labs.json
+            git commit -m "Laboratorios automático: $F"
+            git push
+            echo "actualizado: $F"
+          else
+            echo "sin cambios en labs.json"
+          fi
