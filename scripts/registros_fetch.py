@@ -10,15 +10,22 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, 'registros_sag.json')
 S = requests.Session(); S.headers.update({'User-Agent': 'Mozilla/5.0 (SAG-Exportaciones registros)'})
 
-# páginas a recorrer: (url_base, sección por defecto, nº de páginas a mirar)
+# páginas a recorrer: (url_base, sección por defecto, nº de páginas, clave forzada o None)
 PAGES = [
- ('https://www.sag.gob.cl/ambitos-de-accion/exportaciones/registros', 'r', 9),
- ('https://www.sag.gob.cl/ambitos-de-accion/exportaciones/procedimientos', 'p', 6),
- ('https://www.sag.gob.cl/ambitos-de-accion/exportaciones/normativas', 'n', 4),
- ('https://www.sag.gob.cl/ambitos-de-accion/exportaciones/publicaciones', 'h', 4),
- ('https://www.sag.gob.cl/ambitos-de-accion/productos-vegetales-diferentes-paises/registros', 'r', 9),
- ('https://www.sag.gob.cl/ambitos-de-accion/productos-vegetales-diferentes-paises/procedimientos', 'p', 9),
- ('https://www.sag.gob.cl/ambitos-de-accion/productos-vegetales-estados-unidos/procedimientos', 'p', 4),
+ ('https://www.sag.gob.cl/ambitos-de-accion/exportaciones/registros', 'r', 9, None),
+ ('https://www.sag.gob.cl/ambitos-de-accion/exportaciones/procedimientos', 'p', 6, None),
+ ('https://www.sag.gob.cl/ambitos-de-accion/exportaciones/normativas', 'n', 4, None),
+ ('https://www.sag.gob.cl/ambitos-de-accion/exportaciones/publicaciones', 'h', 4, None),
+ ('https://www.sag.gob.cl/ambitos-de-accion/productos-vegetales-diferentes-paises/registros', 'r', 9, None),
+ ('https://www.sag.gob.cl/ambitos-de-accion/productos-vegetales-diferentes-paises/procedimientos', 'p', 9, None),
+ ('https://www.sag.gob.cl/ambitos-de-accion/productos-vegetales-estados-unidos/procedimientos', 'p', 4, None),
+ # NIMF 15 · Embalaje de madera (clave forzada n15)
+ ('https://www.sag.gob.cl/ambitos-de-accion/embalajes-de-madera/procedimientos', 'p', 3, 'n15'),
+ ('https://www.sag.gob.cl/ambitos-de-accion/embalajes-de-madera/registros', 'r', 3, 'n15'),
+ ('https://www.sag.gob.cl/ambitos-de-accion/embalajes-de-madera/normativas', 'n', 3, 'n15'),
+ ('https://www.sag.gob.cl/ambitos-de-accion/embalajes-de-madera-de-exportacion/procedimientos', 'p', 3, 'n15'),
+ ('https://www.sag.gob.cl/ambitos-de-accion/la-marca-nimf-ndeg15/procedimientos', 'p', 2, 'n15'),
+ ('https://www.sag.gob.cl/ambitos-de-accion/paises-que-exigen-la-nimf-ndeg-15/procedimientos', 'r', 2, 'n15'),
 ]
 # país/tema -> clave CAT_PAISES (por palabra clave en el título)
 KEYS = [('china','cn'),('corea','kr'),('méxico','mx'),('mexico','mx'),('estados unidos','us'),('ee.uu','us'),('brasil','br'),
@@ -46,7 +53,7 @@ def typeof(title, sec):
     return {'r':'Registro','p':'Procedimiento','n':'Normativa','h':'Guía','c':'Circular'}.get(sec,'Documento')
 
 FILERE = re.compile(r'/sites/default/files/[^"\')>]+\.(?:xlsx|xls|pdf|docx|doc)', re.I)
-def scrape(url, sec, pages):
+def scrape(url, sec, pages, forcekey=None):
     out = {}
     for pa in range(pages):
         u = url + ('?title=&field_tema_registros_y_listas_target_id=All&field_tipo_de_registro_target_id=All&page=%d' % pa if 'registros' in url
@@ -74,7 +81,7 @@ def scrape(url, sec, pages):
             ctx = (a.find_parent(['tr','article','div']) or a)
             m = re.search(r'(\d{1,2})/(\d{1,2})/(\d{4})', ctx.get_text(' ')) if ctx else None
             if m: f = '%s-%02d-%02d' % (m.group(3), int(m.group(2)), int(m.group(1)))
-            out[fn] = {'f': f, 't': typeof(title, sec), 'n': title[:180], 'c': keyof(title), 'u': full, 's': sec}
+            out[fn] = {'f': f, 't': typeof(title, sec), 'n': title[:180], 'c': forcekey or keyof(title), 'u': full, 's': sec}
             rows += 1
         print('  %s pag %d -> %d archivos' % (url.split('/')[-1], pa, rows), flush=True)
         if rows == 0 and pa > 0: break
@@ -83,9 +90,9 @@ def scrape(url, sec, pages):
 
 def main():
     allrows = {}
-    for url, sec, pages in PAGES:
+    for url, sec, pages, fk in PAGES:
         print('==', url)
-        allrows.update(scrape(url, sec, pages))
+        allrows.update(scrape(url, sec, pages, fk))
     print('TOTAL archivos:', len(allrows))
     if len(allrows) < 30:
         print('ERROR: muy pocos (%d); no se reemplaza.' % len(allrows)); raise SystemExit(1)
