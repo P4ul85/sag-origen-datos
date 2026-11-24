@@ -1,0 +1,42 @@
+name: Terceros autorizados NIMF 15
+on:
+  schedule:
+    - cron: '23 12 * * 2'   # martes ~09:23 Chile
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: nimf15
+  cancel-in-progress: false
+jobs:
+  nimf15:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install requests openpyxl
+      - name: Bajar y parsear el registro NIMF 15
+        run: python3 scripts/nimf15_fetch.py
+      - name: Commit si cambió
+        run: |
+          if git status --porcelain nimf15.json | grep -q .; then
+            git config user.name 'SAG NIMF15 bot'
+            git config user.email 'noreply@anthropic.com'
+            N=$(python3 -c "import json;print(json.load(open('nimf15.json'))['n'])")
+            git add nimf15.json
+            git commit -m "Terceros NIMF 15 automático: $N empresas ($(date +%d-%m-%Y))"
+            git pull --rebase --autostash && git push
+            echo "actualizado: $N empresas"
+          else
+            echo "sin cambios en nimf15.json"
+          fi
+      - name: Avisar si falló
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "⚠️ Falló Terceros NIMF 15" \
+            --body "Workflow $GITHUB_WORKFLOW falló el $(date -u). Log: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" || true
