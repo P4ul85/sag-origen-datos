@@ -26,6 +26,9 @@ PAGES = [
  ('https://www.sag.gob.cl/ambitos-de-accion/embalajes-de-madera-de-exportacion/procedimientos', 'p', 3, 'n15'),
  ('https://www.sag.gob.cl/ambitos-de-accion/la-marca-nimf-ndeg15/procedimientos', 'p', 2, 'n15'),
  ('https://www.sag.gob.cl/ambitos-de-accion/paises-que-exigen-la-nimf-ndeg-15/procedimientos', 'r', 2, 'n15'),
+ # Lobesia botrana · PNLb (clave forzada lob)
+ ('https://www.sag.gob.cl/ambitos-de-accion/lobesia-botrana-o-polilla-del-racimo-de-la-vid/registros', 'r', 3, 'lob'),
+ ('https://www.sag.gob.cl/ambitos-de-accion/lobesia-botrana-o-polilla-del-racimo-de-la-vid/normativas', 'n', 3, 'lob'),
 ]
 # país/tema -> clave CAT_PAISES (por palabra clave en el título)
 KEYS = [('china','cn'),('corea','kr'),('méxico','mx'),('mexico','mx'),('estados unidos','us'),('ee.uu','us'),('brasil','br'),
