@@ -1,0 +1,46 @@
+name: Cruce predios-listas (Código SAG)
+on:
+  workflow_run:
+    workflows: ["Vigilante de registros SAG"]
+    types: [completed]
+  schedule:
+    - cron: '41 12 * * *'   # ~09:41 Chile, respaldo diario
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: predios-listas
+  cancel-in-progress: false
+jobs:
+  cruce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install requests openpyxl
+      - name: Abrir los listados y armar predios_listas.json
+        run: python3 scripts/predios_listas_fetch.py
+      - name: Commit si cambió
+        run: |
+          if git status --porcelain predios_listas.json | grep -q .; then
+            git config user.name 'SAG predios-listas bot'
+            git config user.email 'noreply@anthropic.com'
+            NC=$(python3 -c "import json;print(json.load(open('predios_listas.json'))['nC'])")
+            NL=$(python3 -c "import json;print(json.load(open('predios_listas.json'))['nL'])")
+            git add predios_listas.json
+            git commit -m "Cruce predios-listas automático: $NC códigos en $NL listas ($(date +%d-%m-%Y))"
+            git pull --rebase --autostash && git push
+            echo "actualizado: $NC códigos / $NL listas"
+          else
+            echo "sin cambios en predios_listas.json"
+          fi
+      - name: Avisar si falló
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "⚠️ Falló el cruce predios-listas" \
+            --body "Workflow $GITHUB_WORKFLOW falló el $(date -u). Log: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" || true
