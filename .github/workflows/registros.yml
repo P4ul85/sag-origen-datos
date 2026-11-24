@@ -1,0 +1,42 @@
+name: Vigilante de registros SAG
+on:
+  schedule:
+    - cron: '17 11,23 * * *'   # ~08:17 y 20:17 Chile
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: registros
+  cancel-in-progress: false
+jobs:
+  registros:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install requests beautifulsoup4
+      - name: Rastrear registros del SAG y actualizar registros_sag.json
+        run: python3 scripts/registros_fetch.py
+      - name: Commit si cambió
+        run: |
+          if git status --porcelain registros_sag.json | grep -q .; then
+            git config user.name 'SAG registros bot'
+            git config user.email 'noreply@anthropic.com'
+            N=$(python3 -c "import json;print(json.load(open('registros_sag.json'))['n'])")
+            git add registros_sag.json
+            git commit -m "Registros SAG automático: $N documentos ($(date +%d-%m-%Y))"
+            git push
+            echo "actualizado: $N documentos"
+          else
+            echo "sin cambios en registros_sag.json"
+          fi
+      - name: Avisar si falló
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "⚠️ Falló el vigilante de registros SAG" \
+            --body "Workflow $GITHUB_WORKFLOW falló el $(date -u). Log: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" || true
