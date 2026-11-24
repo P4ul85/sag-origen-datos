@@ -10,7 +10,16 @@ OUT = os.path.join(ROOT, 'predios_listas.json')
 S = requests.Session(); S.headers.update({'User-Agent': 'Mozilla/5.0 (SAG predios-listas)'})
 
 # ¿es un listado de predios por mercado/especie? (por el título)
-LISTA_RE = re.compile(r'predio|participante|aprobad|consolidad|sitios?\b|regla\s+vid|csg|c\.?s\.?g|habilitad|inscrit', re.I)
+LISTA_RE = re.compile(r'predio|productor|recinto|participante|aprobad|consolidad|sitios?\b|regla\s+vid|csg|c\.?s\.?g|habilitad|inscrit', re.I)
+# etiqueta corta para los listados de Lobesia (clave lob)
+def lobLabel(t):
+    t = t.lower()
+    if 'aplicaci' in t: return 'Aplicación química obligatoria'
+    if 'confusi' in t or 'emisor' in t or 'ecs' in t: return 'Confusión sexual (ECS)'
+    if 'recinto' in t: return 'Recinto de riesgo'
+    if 'prospecci' in t: return 'Prospección'
+    if 'área reglamentada' in t or 'area reglamentada' in t or 'ubicados dentro' in t or 'dar' in t: return 'Área reglamentada'
+    return 'Lobesia'
 # columnas que contienen el Código SAG del predio/sitio/productor
 COLHDR_RE = re.compile(r'\bcsg\b|c[óo]digo.*(sag|sitio|predio|productor|csg)|sitio\s*de\s*produc|c[óo]d\.?\s*(sitio|predio|sag)|\bcsp\b|cuartel', re.I)
 CODE_RE = re.compile(r'^\d{5,8}$')
@@ -74,7 +83,10 @@ def main():
         if not codes:
             print('  0 códigos', r['n'][:55]); continue
         lid = len(L)
-        L.append({'id': lid, 't': r['n'][:120], 'mk': pick(r['n'], MERCADOS), 'sp': pick(r['n'], ESPECIES), 'f': r.get('f', ''), 'u': url})
+        ent = {'id': lid, 't': r['n'][:120], 'mk': pick(r['n'], MERCADOS), 'sp': pick(r['n'], ESPECIES), 'f': r.get('f', ''), 'u': url}
+        if r.get('c') == 'lob':  # listados de Lobesia (área reglamentada, aplicación obligatoria, ECS, recintos…)
+            ent['lob'] = 1; ent['lab'] = lobLabel(r['n'])
+        L.append(ent)
         for c in codes:
             C.setdefault(c, [])
             if lid not in C[c]: C[c].append(lid)
