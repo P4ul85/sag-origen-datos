@@ -1,0 +1,41 @@
+name: Actualizar Registro SDP
+on:
+  schedule:
+    - cron: '20 8 * * *'   # todos los días ~05:20 Chile; el script usa modo full los domingos y daily el resto
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'daily (rápido) o full (completo)'
+        default: daily
+        type: choice
+        options: [daily, full]
+permissions:
+  contents: write
+concurrency:
+  group: sdp
+  cancel-in-progress: false
+jobs:
+  sdp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Instalar dependencias
+        run: pip install requests beautifulsoup4
+      - name: Rastrear SDP y actualizar mexico_sdp.json
+        run: python3 scripts/sdp_fetch.py ${{ github.event.inputs.mode }}
+      - name: Commit si cambió
+        run: |
+          if git status --porcelain mexico_sdp.json | grep -q .; then
+            git config user.name 'SAG SDP bot'
+            git config user.email 'noreply@anthropic.com'
+            N=$(python3 -c "import json;print(json.load(open('mexico_sdp.json'))['n'])")
+            git add mexico_sdp.json
+            git commit -m "SDP México automático: $N sitios ($(date +%d-%m-%Y))"
+            git push
+            echo "actualizado: $N sitios"
+          else
+            echo "sin cambios en mexico_sdp.json"
+          fi
