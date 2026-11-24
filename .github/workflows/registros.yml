@@ -19,18 +19,21 @@ jobs:
       - run: pip install requests beautifulsoup4
       - name: Rastrear registros del SAG y actualizar registros_sag.json
         run: python3 scripts/registros_fetch.py
+      - name: Regenerar docs_fix.json (enlaces de documentos de la app -> URL oficial del SAG)
+        run: python3 scripts/docs_fix_build.py --write || true
       - name: Commit si cambió
         run: |
-          if git status --porcelain registros_sag.json | grep -q .; then
+          if git status --porcelain registros_sag.json docs_fix.json | grep -q .; then
             git config user.name 'SAG registros bot'
             git config user.email 'noreply@anthropic.com'
             N=$(python3 -c "import json;print(json.load(open('registros_sag.json'))['n'])")
-            git add registros_sag.json
-            git commit -m "Registros SAG automático: $N documentos ($(date +%d-%m-%Y))"
+            D=$(python3 -c "import json;print(json.load(open('docs_fix.json'))['n'])" 2>/dev/null || echo 0)
+            git add registros_sag.json docs_fix.json
+            git commit -m "Registros SAG automático: $N documentos, $D enlaces corregidos ($(date +%d-%m-%Y))"
             git push
-            echo "actualizado: $N documentos"
+            echo "actualizado: $N documentos, $D enlaces"
           else
-            echo "sin cambios en registros_sag.json"
+            echo "sin cambios"
           fi
       - name: Avisar si falló
         if: failure()
