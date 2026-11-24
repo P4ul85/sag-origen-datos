@@ -20,19 +20,22 @@ def find_excel():
         print('aviso: no pude leer la página:', e)
     return 'https://www.sag.gob.cl/sites/default/files/NIMF15%20listado%20web%20forestal%20%284%29_0.xlsx', ''
 
-# palabras clave de columnas (sin datos personales: se descartan cédula/representante/responsable/contacto/correo/telefono)
+# palabras clave de columnas (sin datos personales: se descartan cédula/RUT/representante/correo/teléfono/sexo)
 COLS = [
- ('cod', r'c[oó]digo|n[°º]\s*autoriz|n[°º]\s*empresa|n[°º]\s*registro|^n[°º]$|autorizaci[oó]n|marca'),
- ('emp', r'raz[oó]n\s*social|empresa|nombre\s*(de\s*la\s*)?empresa'),
- ('rut', r'\brut\b'),
- ('trat', r'tratamiento|t[eé]cnica|medida|ht|bromuro'),
- ('reg', r'regi[oó]n'),
- ('com', r'comuna'),
- ('dir', r'direcci[oó]n|domicilio|ubicaci[oó]n'),
- ('vig', r'vigenc|vencimiento|fecha\s*de\s*t[eé]rmino|hasta|caduc'),
- ('res', r'resoluci[oó]n|res\.'),
+ ('trat', r'tipo\.?\s*tto|tipo\.?\s*trat|tipo\s*de\s*tratamiento'),
+ ('emp',  r'raz[oó]n\s*social|nombre\s*o\s*raz[oó]n|empresa'),
+ ('com',  r'comuna'),
+ ('reg',  r'regi[oó]n'),
+ ('ofi',  r'oficina\s*sectorial'),
+ ('res',  r'resoluci[oó]n'),
+ ('cam',  r'c[aá]mara'),
+ ('cod',  r'c[oó]digo\s*nimf|c[oó]digo'),
+ ('vig',  r'vencimiento|vigenc'),
+ ('dir',  r'direcci[oó]n\s*autoriz|domicilio'),
+ ('planta', r'direcci[oó]n\s*planta|planta\s*(de\s*)?tratamiento'),
+ ('med',  r'medidas\s*aplicadas'),
 ]
-SKIP = re.compile(r'c[eé]dula|\bc\.?i\.?\b|representante|responsable|contacto|correo|e-?mail|tel[eé]fono|celular|nombre\s*(del\s*)?(representante|responsable|t[eé]cnico|profesional)', re.I)
+SKIP = re.compile(r'c[eé]dula|\bc\.?\s*i\.?\b|\brut\b|representante|responsable|contacto|correo|e-?mail|tel[eé]fono|celular|sexo', re.I)
 
 def main():
     url, _ = find_excel()
@@ -68,7 +71,11 @@ def main():
         rec = {}
         for key, idx in colmap.items():
             if idx < len(row) and row[idx]:
-                rec[key] = re.sub(r'\s+', ' ', row[idx]).strip()[:120]
+                v = re.sub(r'\s+', ' ', row[idx]).strip()
+                if key == 'vig':
+                    m = re.match(r'(\d{4}-\d{2}-\d{2})', v)  # quitar la hora 00:00:00
+                    if m: v = m.group(1)
+                rec[key] = v[:160]
         # requiere al menos empresa o código
         if rec.get('emp') or rec.get('cod'):
             out.append(rec)
