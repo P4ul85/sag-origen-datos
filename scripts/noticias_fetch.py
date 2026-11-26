@@ -40,11 +40,15 @@ FEEDS = [
     ("Cooperativa · Economía", "https://www.cooperativa.cl/noticias/site/edic/base/port/rss_economia.xml", False),
     # Prensa regional (Arica a Punta Arenas; se filtra por relevancia agro/exportación)
     ("Diario de Antofagasta", "https://www.diarioantofagasta.cl/feed/", False),
+    ("El Día (Coquimbo)", "https://www.diarioeldia.cl/feed/", False),
+    ("El Ovallino (Coquimbo)", "https://www.elovallino.cl/feed/", False),
     ("El Observador (Quillota)", "https://www.observador.cl/feed/", False),
+    ("El Rancagüino (O'Higgins)", "https://www.elrancaguino.cl/feed/", False),
+    ("El Tipógrafo (O'Higgins)", "https://eltipografo.cl/feed/", False),
+    ("Diario El Centro (Maule)", "https://diarioelcentro.cl/feed/", False),
     ("La Discusión (Ñuble)", "https://www.ladiscusion.cl/feed/", False),
+    ("Crónica Chillán (Ñuble)", "https://www.cronicachillan.cl/feed/", False),
     ("Diario Concepción", "https://www.diarioconcepcion.cl/feed/", False),
-    ("El Austral de La Araucanía", "https://www.australtemuco.cl/feed/", False),
-    ("El Divisadero (Aysén)", "https://www.eldivisadero.cl/rss.xml", False),
     ("La Prensa Austral (Magallanes)", "https://laprensaaustral.cl/feed/", False),
 ]
 PER_FEED = 8          # noticias por fuente
