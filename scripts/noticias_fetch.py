@@ -18,7 +18,9 @@ from bs4 import BeautifulSoup
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 OUT = os.path.join(ROOT, "noticias.json")
-UA = {"User-Agent": "Mozilla/5.0 (compatible; SAG-Origen-news/1.0)"}
+UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+      "Accept": "application/rss+xml, application/xml, text/xml, */*"}
 
 # (nombre, URL del feed RSS, ag)  ag=True → portal agrícola (se incluye todo);
 # ag=False → prensa general/nacional/regional (se filtra por palabras clave agro/exportación)
@@ -27,7 +29,7 @@ FEEDS = [
     ("Portal Frutícola", "https://www.portalfruticola.com/feed/", True),
     ("Simfruit",         "https://www.simfruit.cl/feed/", True),
     ("Frutas de Chile",  "https://www.frutasdechile.cl/feed/", True),
-    ("Redagrícola",      "https://www.redagricola.com/cl/feed/", True),
+    ("Redagrícola",      "https://www.redagricola.com/feed/", True),
     ("Mundoagro",        "https://www.mundoagro.cl/feed/", True),
     ("Agronomía INIA",   "https://www.inia.cl/feed/", True),
     # Prensa nacional (se filtra por relevancia agro/exportación)
@@ -51,9 +53,10 @@ FEEDS = [
     ("Diario Concepción", "https://www.diarioconcepcion.cl/feed/", False),
     ("La Prensa Austral (Magallanes)", "https://laprensaaustral.cl/feed/", False),
 ]
-PER_FEED = 8          # noticias por fuente
-MAX_TOTAL = 44        # total en el carrusel
+PER_FEED = 6          # noticias por fuente (variedad entre diarios)
+MAX_TOTAL = 40        # total en el carrusel
 MIN_OK = 6            # salvaguarda: no publicar si quedan menos que esto
+MAX_AGE_DAYS = 75     # descarta noticias más viejas que esto (si traen fecha)
 
 # Palabras clave (sin tildes) para dejar solo prensa general relevante al agro/exportación
 KW = ("frut","agric","agro","export","hortal","palta","cereza","uva","arandano","manzana",
@@ -79,6 +82,33 @@ def clean(txt, n=180):
     txt = BeautifulSoup(html.unescape(txt), "html.parser").get_text(" ", strip=True)
     txt = re.sub(r"\s+", " ", txt).strip()
     return (txt[:n].rstrip() + "…") if len(txt) > n else txt
+
+def clean_title(t):
+    t = clean(t, 150)
+    if " | " in t:            # el pipe casi siempre separa el nombre de la fuente
+        t = t.rsplit(" | ", 1)[0].strip()
+    return t
+
+def tkey(t):                  # clave para deduplicar la misma noticia entre diarios
+    s = re.sub(r"[^a-z0-9 ]", "", _norm(t))
+    return re.sub(r"\s+", " ", s).strip()[:60]
+
+def ok_img(u):
+    return isinstance(u, str) and u.startswith("http") and \
+        not re.search(r"(placeholder|default|blank|spacer|1x1|sprite|avatar|logo)", u, re.I)
+
+def fetch_feed(url):
+    """Descarga el feed con un reintento para errores transitorios (p. ej. conexión
+    cortada). NO desactiva la verificación TLS: si un sitio manda mal su certificado,
+    se omite solo (que lo corrija la fuente)."""
+    last = None
+    for _ in range(2):
+        try:
+            r = requests.get(url, headers=UA, timeout=25)
+            return feedparser.parse(r.content)
+        except Exception as ex:
+            last = ex
+    raise last
 
 def img_from_entry(e):
     # media:content / media:thumbnail
@@ -121,42 +151,48 @@ def date_iso(e):
     return ""
 
 def main():
-    items, seen = [], set()
+    items, seen, seen_t = [], set(), set()
+    today = datetime.date.today()
     for src, url, ag in FEEDS:
         try:
-            r = requests.get(url, headers=UA, timeout=20)
-            d = feedparser.parse(r.content)
+            d = fetch_feed(url)
         except Exception as ex:
             print(f"  ! {src}: {ex}")
             continue
         n = 0
         for e in d.entries:
             link = (e.get("link") or "").strip()
-            title = clean(e.get("title"), 140)
+            title = clean_title(e.get("title"))
             if not link or not title or link in seen:
+                continue
+            tk = tkey(title)
+            if tk and tk in seen_t:        # misma noticia en otro diario
                 continue
             summ = clean(e.get("summary"), 170)
             if not ag and not is_relevant(title, summ):
                 continue
+            f = date_iso(e)
+            if f:                          # descarta lo viejo
+                try:
+                    if (today - datetime.date.fromisoformat(f)).days > MAX_AGE_DAYS:
+                        continue
+                except Exception:
+                    pass
             img = img_from_entry(e)
             if not img:
                 img = og_image(link)
-            items.append({
-                "t": title,
-                "d": summ,
-                "u": link,
-                "img": img,
-                "src": src,
-                "f": date_iso(e),
-            })
-            seen.add(link)
+            if not ok_img(img):
+                img = ""
+            items.append({"t": title, "d": summ, "u": link, "img": img, "src": src, "f": f})
+            seen.add(link);
+            if tk: seen_t.add(tk)
             n += 1
             if n >= PER_FEED:
                 break
         print(f"  {src}: {n} noticias" + ("" if ag else " (filtrado agro)"))
 
-    # ordenar por fecha desc y recortar
-    items.sort(key=lambda x: x["f"] or "", reverse=True)
+    # ordenar: primero las que traen fecha (desc), luego el resto
+    items.sort(key=lambda x: x["f"] or "0000-00-00", reverse=True)
     items = items[:MAX_TOTAL]
 
     if len(items) < MIN_OK:
