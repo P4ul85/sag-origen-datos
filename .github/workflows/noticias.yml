@@ -1,0 +1,34 @@
+name: Noticias prensa agrícola
+on:
+  schedule:
+    - cron: '25 10,22 * * *'   # ~07:25 y 19:25 Chile
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: noticias
+  cancel-in-progress: false
+jobs:
+  noticias:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install requests feedparser beautifulsoup4
+      - name: Recolectar noticias
+        run: python3 scripts/noticias_fetch.py
+      - name: Commit si cambió
+        run: |
+          if git status --porcelain noticias.json | grep -q .; then
+            git config user.name 'SAG noticias bot'
+            git config user.email 'noreply@anthropic.com'
+            N=$(python3 -c "import json;print(json.load(open('noticias.json'))['n'])")
+            git add noticias.json
+            git commit -m "Noticias prensa agrícola: $N ($(date +%d-%m-%Y))"
+            git push
+            echo "actualizado: $N noticias"
+          else
+            echo "sin cambios"
+          fi
