@@ -112,8 +112,10 @@ def parse_any(url, content):
 
 def main():
     reg = json.load(open(REG))
-    cand = [r for r in reg['R'] if r.get('s') == 'r' and re.search(r'\.(xlsx?|csv|pdf)($|\?)', r['u'], re.I) and LISTA_RE.search(r['n'])]
-    print('candidatos (listados de predios):', len(cand))
+    # TODOS los registros (sección 'r') en formato tabla; si tienen una columna de Código SAG,
+    # se indexan (predios o empresas). Si no, codes_from_rows devuelve vacío y se omiten solos.
+    cand = [r for r in reg['R'] if r.get('s') == 'r' and re.search(r'\.(xlsx?|csv|pdf)($|\?)', r['u'], re.I)]
+    print('candidatos (todos los registros tabla):', len(cand))
     L = []      # leyenda de listas
     C = {}      # csg -> [ids de lista]
     for r in cand:
