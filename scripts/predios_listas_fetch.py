@@ -39,33 +39,80 @@ def pick(title, table, default=''):
         if kw in t: return v
     return default
 
+def _cell_code(c):
+    if c is None: return ''
+    if isinstance(c, float): return str(c).replace('.0', '').strip()
+    return str(c).strip()
+
+def codes_from_rows(rows):
+    """Lógica común: encuentra la(s) columna(s) de Código SAG por el encabezado y junta
+    los códigos de 5-8 dígitos de esas columnas. 'rows' es un iterable de listas de celdas."""
+    codes = set(); target = None; nrow = 0
+    for row in rows:
+        nrow += 1
+        if nrow > 80000: break
+        if row is None: continue
+        if target is None:
+            cols = [i for i, c in enumerate(row) if c is not None and COLHDR_RE.search(str(c))]
+            if cols: target = cols; continue
+        else:
+            for i in target:
+                if i < len(row):
+                    s = _cell_code(row[i])
+                    if CODE_RE.match(s): codes.add(s)
+    return codes
+
 def parse_xlsx(content):
     import openpyxl
-    codes = set()
     wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    codes = set()
     for ws in wb.worksheets:
-        target_cols = None
-        nrow = 0
-        for row in ws.iter_rows(values_only=True):
-            nrow += 1
-            if nrow > 60000: break
-            if target_cols is None:
-                # ¿es fila de encabezado con una columna de código?
-                cols = [i for i, c in enumerate(row) if c is not None and COLHDR_RE.search(str(c))]
-                if cols:
-                    target_cols = cols
-                    continue
-            else:
-                for i in target_cols:
-                    if i < len(row) and row[i] is not None:
-                        s = str(row[i]).strip().replace('.0', '') if isinstance(row[i], float) else str(row[i]).strip()
-                        if CODE_RE.match(s): codes.add(s)
+        codes |= codes_from_rows(ws.iter_rows(values_only=True))
     wb.close()
     return codes
 
+def parse_xls(content):
+    import xlrd
+    wb = xlrd.open_workbook(file_contents=content)
+    codes = set()
+    for sh in wb.sheets():
+        codes |= codes_from_rows(sh.row_values(r) for r in range(sh.nrows))
+    return codes
+
+def parse_csv(content):
+    import csv
+    text = None
+    for enc in ('utf-8-sig', 'latin-1'):
+        try: text = content.decode(enc); break
+        except Exception: pass
+    if text is None: return set()
+    sample = text[:4096]
+    delim = ';' if sample.count(';') >= sample.count(',') else ','
+    return codes_from_rows(csv.reader(io.StringIO(text), delimiter=delim))
+
+def parse_pdf(content):
+    try:
+        import pdfplumber
+    except Exception:
+        return set()
+    codes = set()
+    with pdfplumber.open(io.BytesIO(content)) as pdf:
+        for pg in pdf.pages:
+            for tb in (pg.extract_tables() or []):
+                codes |= codes_from_rows(tb)
+    return codes
+
+PARSERS = [('.xlsx', parse_xlsx), ('.xls', parse_xls), ('.csv', parse_csv), ('.pdf', parse_pdf)]
+def parse_any(url, content):
+    u = url.lower().split('?')[0]
+    for ext, fn in PARSERS:
+        if u.endswith(ext):
+            return fn(content)
+    return set()
+
 def main():
     reg = json.load(open(REG))
-    cand = [r for r in reg['R'] if r.get('s') == 'r' and re.search(r'\.xlsx?$', r['u'], re.I) and LISTA_RE.search(r['n'])]
+    cand = [r for r in reg['R'] if r.get('s') == 'r' and re.search(r'\.(xlsx?|csv|pdf)($|\?)', r['u'], re.I) and LISTA_RE.search(r['n'])]
     print('candidatos (listados de predios):', len(cand))
     L = []      # leyenda de listas
     C = {}      # csg -> [ids de lista]
@@ -73,11 +120,9 @@ def main():
         url = r['u']
         try:
             resp = S.get(url, timeout=120)
-            if resp.status_code != 200 or not resp.content: 
+            if resp.status_code != 200 or not resp.content:
                 print('  skip', resp.status_code, r['n'][:50]); continue
-            if not url.lower().endswith('.xlsx'):
-                print('  (no xlsx, omito)', r['n'][:50]); continue
-            codes = parse_xlsx(resp.content)
+            codes = parse_any(url, resp.content)
         except Exception as e:
             print('  err', r['n'][:50], str(e)[:60]); continue
         if not codes:
