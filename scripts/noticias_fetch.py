@@ -20,16 +20,54 @@ ROOT = os.path.dirname(HERE)
 OUT = os.path.join(ROOT, "noticias.json")
 UA = {"User-Agent": "Mozilla/5.0 (compatible; SAG-Origen-news/1.0)"}
 
-# (nombre de la fuente, URL del feed RSS)
+# (nombre, URL del feed RSS, ag)  ag=True → portal agrícola (se incluye todo);
+# ag=False → prensa general/nacional/regional (se filtra por palabras clave agro/exportación)
 FEEDS = [
-    ("Portal Frutícola", "https://www.portalfruticola.com/feed/"),
-    ("Simfruit",         "https://www.simfruit.cl/feed/"),
-    ("Frutas de Chile",  "https://www.frutasdechile.cl/feed/"),
-    ("Redagrícola",      "https://www.redagricola.com/cl/feed/"),
+    # Portales agrícolas / frutícolas (todo)
+    ("Portal Frutícola", "https://www.portalfruticola.com/feed/", True),
+    ("Simfruit",         "https://www.simfruit.cl/feed/", True),
+    ("Frutas de Chile",  "https://www.frutasdechile.cl/feed/", True),
+    ("Redagrícola",      "https://www.redagricola.com/cl/feed/", True),
+    ("Mundoagro",        "https://www.mundoagro.cl/feed/", True),
+    ("Agronomía INIA",   "https://www.inia.cl/feed/", True),
+    # Prensa nacional (se filtra por relevancia agro/exportación)
+    ("El Mostrador",     "https://www.elmostrador.cl/feed/", False),
+    ("BioBioChile · Economía", "https://www.biobiochile.cl/lista/categorias/economia/feed", False),
+    ("La Tercera",       "https://www.latercera.com/feed/", False),
+    ("El Dínamo",        "https://www.eldinamo.cl/feed/", False),
+    ("ADN Radio",        "https://www.adnradio.cl/feed/", False),
+    ("Emol · Economía",  "https://www.emol.com/rss/rss.asp?canal=economia", False),
+    ("Cooperativa · Economía", "https://www.cooperativa.cl/noticias/site/edic/base/port/rss_economia.xml", False),
+    # Prensa regional (Arica a Punta Arenas; se filtra por relevancia agro/exportación)
+    ("Diario de Antofagasta", "https://www.diarioantofagasta.cl/feed/", False),
+    ("El Observador (Quillota)", "https://www.observador.cl/feed/", False),
+    ("La Discusión (Ñuble)", "https://www.ladiscusion.cl/feed/", False),
+    ("Diario Concepción", "https://www.diarioconcepcion.cl/feed/", False),
+    ("El Austral de La Araucanía", "https://www.australtemuco.cl/feed/", False),
+    ("El Divisadero (Aysén)", "https://www.eldivisadero.cl/rss.xml", False),
+    ("La Prensa Austral (Magallanes)", "https://laprensaaustral.cl/feed/", False),
 ]
 PER_FEED = 8          # noticias por fuente
-MAX_TOTAL = 40        # total en el carrusel
+MAX_TOTAL = 44        # total en el carrusel
 MIN_OK = 6            # salvaguarda: no publicar si quedan menos que esto
+
+# Palabras clave (sin tildes) para dejar solo prensa general relevante al agro/exportación
+KW = ("frut","agric","agro","export","hortal","palta","cereza","uva","arandano","manzana",
+      "kiwi","ciruela","durazno","nectarin","pera","citric","naranja","limon","mandarina",
+      "huerto","campo","cosecha","temporada","packing","exportador","fitosanit","sag ",
+      " sag","aduana","puerto","embalaje","vino","vinedo","nuez","almendra","avellana",
+      "berries","frambuesa","mosca de la fruta","lobesia","usda","aphis","arancel","inia",
+      "odepa","asoex","fedefruta","riego","sequia","temporeros","packing","agroindustria")
+
+def _norm(s):
+    s = (s or "").lower()
+    for a,b in (("á","a"),("é","e"),("í","i"),("ó","o"),("ú","u"),("ü","u"),("ñ","n")):
+        s = s.replace(a,b)
+    return s
+
+def is_relevant(title, summary):
+    t = _norm(title + " " + summary)
+    return any(k in t for k in KW)
 
 def clean(txt, n=180):
     if not txt:
@@ -80,7 +118,7 @@ def date_iso(e):
 
 def main():
     items, seen = [], set()
-    for src, url in FEEDS:
+    for src, url, ag in FEEDS:
         try:
             r = requests.get(url, headers=UA, timeout=20)
             d = feedparser.parse(r.content)
@@ -93,12 +131,15 @@ def main():
             title = clean(e.get("title"), 140)
             if not link or not title or link in seen:
                 continue
+            summ = clean(e.get("summary"), 170)
+            if not ag and not is_relevant(title, summ):
+                continue
             img = img_from_entry(e)
             if not img:
                 img = og_image(link)
             items.append({
                 "t": title,
-                "d": clean(e.get("summary"), 170),
+                "d": summ,
                 "u": link,
                 "img": img,
                 "src": src,
@@ -108,7 +149,7 @@ def main():
             n += 1
             if n >= PER_FEED:
                 break
-        print(f"  {src}: {n} noticias")
+        print(f"  {src}: {n} noticias" + ("" if ag else " (filtrado agro)"))
 
     # ordenar por fecha desc y recortar
     items.sort(key=lambda x: x["f"] or "", reverse=True)
